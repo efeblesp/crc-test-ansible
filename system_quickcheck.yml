@@ -7,7 +7,7 @@
     - name: STEP 1 – Host Summary
       tags: summary
       block:
-        - name: Show Host Summary (Facts)
+        - name: Show Host Summary
           ansible.builtin.debug:
             msg:
               - "Host: {{ ansible_facts.hostname | default(inventory_hostname) }}"
@@ -21,7 +21,7 @@
     - name: STEP 2 – Primary Network
       tags: network
       block:
-        - name: Show Primary Network (Facts)
+        - name: Show Primary Network
           ansible.builtin.debug:
             msg:
               - "Primary IPv4: {{ ansible_facts.default_ipv4.address | default('n/a') }}"
