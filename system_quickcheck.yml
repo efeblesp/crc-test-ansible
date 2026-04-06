@@ -4,132 +4,150 @@
   gather_facts: true
 
   tasks:
-    - name: Show Host Summary (Facts)
-      ansible.builtin.debug:
-        msg:
-          - "Host: {{ ansible_facts.hostname | default(inventory_hostname) }}"
-          - "OS Family: {{ ansible_facts.os_family | default('unknown') }}"
-          - "OS: {{ ansible_facts.distribution | default('') }} {{ ansible_facts.distribution_version | default('') }}"
-          - "Kernel: {{ ansible_facts.kernel | default('unknown') }} {{ ansible_facts.kernel_version | default('') }}"
-          - "Arch: {{ ansible_facts.architecture | default('unknown') }}"
-          - "vCPUs: {{ ansible_facts.processor_vcpus | default(ansible_facts.processor_count | default('n/a')) }}"
-          - "RAM (MB): {{ ansible_facts.memtotal_mb | default('n/a') }}"
+    - name: STEP 1 – Host Summary
+      tags: summary
+      block:
+        - name: Show Host Summary (Facts)
+          ansible.builtin.debug:
+            msg:
+              - "Host: {{ ansible_facts.hostname | default(inventory_hostname) }}"
+              - "OS Family: {{ ansible_facts.os_family | default('unknown') }}"
+              - "OS: {{ ansible_facts.distribution | default('') }} {{ ansible_facts.distribution_version | default('') }}"
+              - "Kernel: {{ ansible_facts.kernel | default('unknown') }} {{ ansible_facts.kernel_version | default('') }}"
+              - "Arch: {{ ansible_facts.architecture | default('unknown') }}"
+              - "vCPUs: {{ ansible_facts.processor_vcpus | default(ansible_facts.processor_count | default('n/a')) }}"
+              - "RAM (MB): {{ ansible_facts.memtotal_mb | default('n/a') }}"
 
-    - name: Show Primary Network (Facts)
-      ansible.builtin.debug:
-        msg:
-          - "Primary IPv4: {{ ansible_facts.default_ipv4.address | default('n/a') }}"
-          - "Interface: {{ ansible_facts.default_ipv4.interface | default('n/a') }}"
-          - "Gateway: {{ ansible_facts.default_ipv4.gateway | default('n/a') }}"
+    - name: STEP 2 – Primary Network
+      tags: network
+      block:
+        - name: Show Primary Network (Facts)
+          ansible.builtin.debug:
+            msg:
+              - "Primary IPv4: {{ ansible_facts.default_ipv4.address | default('n/a') }}"
+              - "Interface: {{ ansible_facts.default_ipv4.interface | default('n/a') }}"
+              - "Gateway: {{ ansible_facts.default_ipv4.gateway | default('n/a') }}"
 
-    - name: Show Uptime (Linux)
-      ansible.builtin.command: uptime -p
-      register: uptime_linux
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family != 'Windows'
+    - name: STEP 3 – Uptime
+      tags: uptime
+      block:
+        - name: Show Uptime (Linux)
+          ansible.builtin.command: uptime -p
+          register: uptime_linux
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family != 'Windows'
 
-    - name: Print Uptime (Linux)
-      ansible.builtin.debug:
-        var: uptime_linux.stdout
-      when:
-        - ansible_facts.os_family != 'Windows'
-        - uptime_linux is defined
+        - name: Print Uptime (Linux)
+          ansible.builtin.debug:
+            var: uptime_linux.stdout
+          when:
+            - ansible_facts.os_family != 'Windows'
+            - uptime_linux is defined
 
-    - name: Show Uptime (Windows)
-      ansible.builtin.shell: wmic os get lastbootuptime /value
-      register: uptime_windows
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family == 'Windows'
+        - name: Show Uptime (Windows)
+          ansible.builtin.raw: wmic os get lastbootuptime /value
+          register: uptime_windows
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family == 'Windows'
 
-    - name: Print Uptime (Windows)
-      ansible.builtin.debug:
-        var: uptime_windows.stdout_lines
-      when:
-        - ansible_facts.os_family == 'Windows'
-        - uptime_windows is defined
+        - name: Print Uptime (Windows)
+          ansible.builtin.debug:
+            msg: "{{ ((uptime_windows.stdout_lines | default([])) + (uptime_windows.stderr_lines | default([]))) | reject('equalto', '') | list }}"
+          when:
+            - ansible_facts.os_family == 'Windows'
+            - uptime_windows is defined
 
-    - name: Show Disk Usage (Linux)
-      ansible.builtin.command: df -h
-      register: disk_linux
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family != 'Windows'
+    - name: STEP 4 – Disk Usage
+      tags: disk
+      block:
+        - name: Show Disk Usage (Linux)
+          ansible.builtin.command: df -h
+          register: disk_linux
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family != 'Windows'
 
-    - name: Print Disk Usage (Linux)
-      ansible.builtin.debug:
-        var: disk_linux.stdout_lines
-      when:
-        - ansible_facts.os_family != 'Windows'
-        - disk_linux is defined
+        - name: Print Disk Usage (Linux)
+          ansible.builtin.debug:
+            var: disk_linux.stdout_lines
+          when:
+            - ansible_facts.os_family != 'Windows'
+            - disk_linux is defined
 
-    - name: Show Disk Usage (Windows)
-      ansible.builtin.shell: wmic logicaldisk get Caption,FileSystem,FreeSpace,Size
-      register: disk_windows
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family == 'Windows'
+        - name: Show Disk Usage (Windows)
+          ansible.builtin.raw: wmic logicaldisk get Caption,FileSystem,FreeSpace,Size
+          register: disk_windows
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family == 'Windows'
 
-    - name: Print Disk Usage (Windows)
-      ansible.builtin.debug:
-        var: disk_windows.stdout_lines
-      when:
-        - ansible_facts.os_family == 'Windows'
-        - disk_windows is defined
+        - name: Print Disk Usage (Windows)
+          ansible.builtin.debug:
+            msg: "{{ ((disk_windows.stdout_lines | default([])) + (disk_windows.stderr_lines | default([]))) | reject('equalto', '') | list }}"
+          when:
+            - ansible_facts.os_family == 'Windows'
+            - disk_windows is defined
 
-    - name: Show Memory Usage (Linux)
-      ansible.builtin.command: free -h
-      register: mem_linux
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family != 'Windows'
+    - name: STEP 5 – Memory Usage
+      tags: memory
+      block:
+        - name: Show Memory Usage (Linux)
+          ansible.builtin.command: free -h
+          register: mem_linux
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family != 'Windows'
 
-    - name: Print Memory Usage (Linux)
-      ansible.builtin.debug:
-        var: mem_linux.stdout_lines
-      when:
-        - ansible_facts.os_family != 'Windows'
-        - mem_linux is defined
+        - name: Print Memory Usage (Linux)
+          ansible.builtin.debug:
+            var: mem_linux.stdout_lines
+          when:
+            - ansible_facts.os_family != 'Windows'
+            - mem_linux is defined
 
-    - name: Show Memory Usage (Windows)
-      ansible.builtin.shell: wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /value
-      register: mem_windows
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family == 'Windows'
+        - name: Show Memory Usage (Windows)
+          ansible.builtin.raw: wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /value
+          register: mem_windows
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family == 'Windows'
 
-    - name: Print Memory Usage (Windows)
-      ansible.builtin.debug:
-        var: mem_windows.stdout_lines
-      when:
-        - ansible_facts.os_family == 'Windows'
-        - mem_windows is defined
+        - name: Print Memory Usage (Windows)
+          ansible.builtin.debug:
+            msg: "{{ ((mem_windows.stdout_lines | default([])) + (mem_windows.stderr_lines | default([]))) | reject('equalto', '') | list }}"
+          when:
+            - ansible_facts.os_family == 'Windows'
+            - mem_windows is defined
 
-    - name: Show Time Sync Status (Linux)
-      ansible.builtin.command: timedatectl status
-      register: time_linux
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family != 'Windows'
+    - name: STEP 6 – Time Sync Status
+      tags: time
+      block:
+        - name: Show Time Sync Status (Linux)
+          ansible.builtin.command: timedatectl status
+          register: time_linux
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family != 'Windows'
 
-    - name: Print Time Sync Status (Linux)
-      ansible.builtin.debug:
-        var: time_linux.stdout_lines
-      when:
-        - ansible_facts.os_family != 'Windows'
-        - time_linux is defined
+        - name: Print Time Sync Status (Linux)
+          ansible.builtin.debug:
+            msg: "{{ (time_linux.stdout_lines | default([])) + (time_linux.stderr_lines | default([])) }}"
+          when:
+            - ansible_facts.os_family != 'Windows'
+            - time_linux is defined
 
-    - name: Show Time Sync Status (Windows)
-      ansible.builtin.shell: w32tm /query /status
-      register: time_windows
-      changed_when: false
-      failed_when: false
-      when: ansible_facts.os_family == 'Windows'
+        - name: Show Time Sync Status (Windows)
+          ansible.builtin.raw: w32tm /query /status
+          register: time_windows
+          changed_when: false
+          failed_when: false
+          when: ansible_facts.os_family == 'Windows'
 
-    - name: Print Time Sync Status (Windows)
-      ansible.builtin.debug:
-        var: time_windows.stdout_lines
-      when:
-        - ansible_facts.os_family == 'Windows'
-        - time_windows is defined
+        - name: Print Time Sync Status (Windows)
+          ansible.builtin.debug:
+            msg: "{{ ((time_windows.stdout_lines | default([])) + (time_windows.stderr_lines | default([]))) | reject('equalto', '') | list }}"
+          when:
+            - ansible_facts.os_family == 'Windows'
+            - time_windows is defined
