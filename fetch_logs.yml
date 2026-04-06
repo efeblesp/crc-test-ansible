@@ -1,0 +1,116 @@
+---
+- name: Fetch Logs
+  hosts: all
+  gather_facts: false
+  vars:
+    archive_file_name: "{{ host_log_dir_name }}_logs.tar.gz"
+    archive_file: "{{ [ host_temp_dir, archive_file_name] | join_path(is_windows) }}"
+    log_temp_dir: "/tmp/logs"
+  
+  pre_tasks:
+    - include_role:
+        name: init_env
+
+  tasks:
+      # *********************************
+      # On Linux and Windows Hosts:
+      # *********************************
+    - name: Create Archive Files
+      block:
+        # Ensure the logs archive file does not exist.
+        - name: Clean Existing Archive File(s)
+          ansible.builtin.raw: >- 
+            {{ ('rm -f "' ~ archive_file ~ '"') if is_linux else ('del /F /Q "' ~ archive_file ~ '"') }}
+          register: del_out
+          failed_when: del_out.rc != 0 and ('could not find' not in (del_out.stdout | lower))
+
+          # Create archive file containing the contents of the temp packages
+          # staging directory.
+        - name: Create Archive
+          block:
+            - name: Create Archive File
+              ansible.builtin.raw: tar -czf "{{ archive_file }}" --directory="{{ host_log_dir }}" .
+              register: tar_out
+          rescue:
+            - name: Show Archive Errors
+              ansible.builtin.debug:
+                msg: "{{ tar_out | format_output }}"
+      when:
+        - not host_is_localhost
+
+    - name: Copy/Extract Logs
+      block:
+          # Copy the *_logs.tar.gz file from the target host to the controller.
+        - name: Transfer Logs Archive to Controller
+          ansible.builtin.fetch:
+            src: "{{ [ host_temp_dir, archive_file_name] | join_path(is_windows) }}"
+            dest: "{{ log_temp_dir }}/{{ archive_file_name }}"
+            flat: true
+            force: true
+
+          # *********************************
+          # On Controller|localhost:
+          # *********************************
+          # Remove existing /tmp/logs/{host_log_dir_name} directory.
+        - name: Clean Staging Directory
+          ansible.builtin.raw: rm -rf "{{ log_temp_dir }}/{{ host_log_dir_name }}"
+          register: rm_out
+          failed_when: rm_out.rc != 0
+          delegate_to: localhost
+
+          # Ensure the /tmp/logs/{host_log_dir_name} directory exists.
+        - name: Create Staging Directory
+          ansible.builtin.raw: mkdir -p "{{ log_temp_dir }}/{{ host_log_dir_name }}"
+          register: mkdir_out
+          failed_when: mkdir_out.rc != 0 and ('exists' not in (mkdir_out.stdout | lower))
+          delegate_to: localhost
+
+          # Extract *_logs.tar.gz archive file.
+        - name: Extract Archive
+          block:
+            - name: Extract Logs Archive
+              ansible.builtin.raw: tar -xf "{{ log_temp_dir }}/{{ archive_file_name }}" -C "{{ log_temp_dir }}/{{ host_log_dir_name }}"
+              register: tar_out
+              delegate_to: localhost
+          rescue:
+            - name: Show Archive Errors
+              ansible.builtin.debug:
+                msg: "{{ tar_out | format_output }}"
+
+          # Copy new/changed logs from the temp/staging directory into the mounted 'logs' folder.
+        - name: Copy/Transfer Logs
+          block:
+            - name: Copy Logs to Destination
+              ansible.builtin.raw: rsync --archive --compress --recursive --times --verbose "{{ log_temp_dir }}/{{ host_log_dir_name }}/" "{{ agent_log_dir }}/{{ host_log_dir_name }}/"
+              register: rsync_out
+              delegate_to: localhost
+              become: true
+          always:
+            - name: Show Copy Results
+              ansible.builtin.debug:
+                msg: "{{ rsync_out | format_output }}"
+
+          # *********************************
+          # On Linux and Windows Hosts:
+          # *********************************
+          # Delete the log files on the host system.
+        - name: Delete Host Logs
+          ansible.builtin.raw: >-
+            {% if is_linux %}
+            rm -rf "{{ host_log_dir }}/*"
+            {% else %}
+            del /S /Q "{{ host_log_dir }}\*" & for /d %i in ("{{ host_log_dir }}\*") do rd /s /q "%i"
+            {% endif %}
+          register: del_out
+          failed_when: del_out.rc != 0 and ('could not find' not in (del_out.stdout | lower))
+
+          # *********************************
+          # On Controller|localhost:
+          # *********************************
+          # Delete the log files on the controller /tmp/logs staging location.
+        - name: Delete Staging Logs
+          ansible.builtin.raw: rm -rf "{{ log_temp_dir }}/{{ host_log_dir_name }}" && rm -rf "{{ log_temp_dir }}/{{ archive_file_name }}"
+          failed_when: false
+          delegate_to: localhost
+      when:
+        - not host_is_localhost

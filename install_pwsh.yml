@@ -1,0 +1,97 @@
+---
+- name: Install Pwsh
+  hosts: all
+  gather_facts: false
+
+  pre_tasks:
+    - include_role:
+        name: init_env
+
+  tasks:
+      # -------------------------------------------
+      # Linux Operations
+      # -------------------------------------------
+    - name: Install PowerShell 7 (Linux)
+      block:
+          # Ensure the SDK agent folders exist on the target host/system:
+          #  e.g.
+          #   /home/demo/sdkagent
+          #   /home/demo/sdkagent/logs
+          #   /home/demo/sdkagent/packages
+          #   /home/demo/sdkagent/scripts
+          #   /home/demo/sdkagent/packages
+        - name: Linux|Initialize Folders
+          import_role:
+            name: init_folders
+
+          # Copy the installation script (*.cmd) to the target host/system.
+        - name: Linux|Push Installation Script
+          ansible.builtin.copy:
+            src: "{{ agent_script_dir }}/{{ host_platform_architecture }}/install-pwsh.sh"
+            dest: "{{ host_script_dir }}/{{ host_platform_architecture }}/install-pwsh.sh"
+            mode: '0777'
+            force: true
+
+          # Copy the PowerShell installer (MSI) file to the target system.
+        - name: Linux|Push Archive File
+          ansible.builtin.copy:
+            src: "{{ item }}"
+            dest: "{{ host_script_dir }}/{{ host_platform_architecture }}"
+            force: true
+          with_fileglob:
+            - "{{ agent_script_dir }}/{{ host_platform_architecture }}/powershell*.tar.gz"
+
+        - name: Linux|Install PowerShell
+          ansible.builtin.raw: "{{ host_script_dir }}/{{ host_platform_architecture }}/install-pwsh.sh"
+          register: out
+
+        - name: Linux|Show Results
+          ansible.builtin.debug:
+            msg: "{{ out | format_output }}"
+      when: 
+        - not host_is_localhost
+        - is_linux
+
+      # -------------------------------------------
+      # Windows Operations
+      # -------------------------------------------
+    - name: Install PowerShell 7 (Windows)
+      block:
+          # Ensure the SDK agent folders exist on the target host/system:
+          #     e.g.
+          #     C:\Users\demo\sdkagent
+          #     C:\Users\demo\sdkagent\logs
+          #     C:\Users\demo\sdkagent\packages
+          #     C:\Users\demo\sdkagent\scripts
+          #     C:\Users\demo\sdkagent\packages
+        - name: Windows|Initialize Folders
+          import_role:
+            name: init_folders
+
+          # Copy the installation script (*.cmd) to the target host/system.
+        - name: Windows|Push Installation Script
+          ansible.builtin.copy:
+            src: "{{ agent_script_dir }}/{{ host_platform_architecture }}/install-pwsh.cmd"
+            dest: "{{ host_script_dir }}\\{{ host_platform_architecture }}\\install-pwsh.cmd"
+            force: true
+
+          # Copy the PowerShell installer (MSI) file to the target system.
+        - name: Windows|Push Installer/MSI
+          ansible.builtin.copy:
+            src: "{{ item }}"
+            dest: "{{ host_script_dir }}\\{{ host_platform_architecture }}"
+            force: true
+          with_fileglob:
+            - "{{ agent_script_dir }}/{{ host_platform_architecture }}/PowerShell*.msi"
+
+          # Execute the installation script (*.cmd) on the target host/system.
+        - name: Windows|Install PowerShell
+          ansible.builtin.raw: "{{ host_script_dir }}\\{{ host_platform_architecture }}\\install-pwsh.cmd"
+          register: out
+
+        - name: Windows|Show Results
+          ansible.builtin.debug:
+            msg: "{{ out | format_output }}"
+      when:
+        - not host_is_localhost
+        - is_windows

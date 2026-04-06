@@ -1,0 +1,17 @@
+---
+- name: Reboot Systems
+  hosts: all
+  gather_facts: false
+
+  pre_tasks:
+    - include_role:
+        name: init_env
+
+  tasks:
+    - include_role:
+        name: reboot_system
+      vars:
+        # Timeout to wait for systems to come back up (in seconds).
+        wait_timeout: 300
+      when:
+        - not host_is_localhost

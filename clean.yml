@@ -1,0 +1,130 @@
+---
+- name: Clean Host
+  hosts: all
+  gather_facts: false
+
+  pre_tasks:
+    - include_role:
+        name: init_env
+
+  tasks:
+      # *********************************
+      # On Controller|localhost:
+      # *********************************
+    - name: Clean Controller System
+      block:
+        - name: Delete '/tmp/.dotnet' Folder
+          ansible.builtin.raw: "rm -rfd /tmp/.dotnet"
+          ignore_errors: true
+
+        - name: Delete '/tmp/ansible' Folder
+          ansible.builtin.raw: "rm -rfd /tmp/ansible"
+          ignore_errors: true
+
+        - name: Delete '/tmp/logs' Folder
+          ansible.builtin.raw: "rm -rfd /tmp/logs"
+          ignore_errors: true
+
+        - name: Delete '/tmp/packages' Folder
+          ansible.builtin.raw: "rm -rfd /tmp/packages"
+          ignore_errors: true
+
+        - name: Delete '/tmp/packages_vc' Folder
+          ansible.builtin.raw: "rm -rfd /tmp/packages_vc"
+          ignore_errors: true
+
+        - name: Delete '/tmp/*' Files
+          ansible.builtin.raw: "rm -rf /tmp/*"
+          ignore_errors: true
+      when:
+        - host_is_localhost
+
+      # *********************************
+      # On Linux Host(s):
+      # *********************************
+    - name: Clean Linux Host Systems
+      block:
+        - name: Delete '{{ host_log_dir }}' Folder
+          ansible.builtin.raw: "rm -rfd  \"{{ host_log_dir }}\""
+          register: rm_log_dir_out
+          failed_when: >
+            rm_log_dir_out.rc != 0
+
+        - name: Delete '{{ host_package_dir }}' Folder
+          ansible.builtin.raw: "rm -rfd \"{{ host_package_dir }}\""
+          register: rm_package_dir_out
+          failed_when: >
+            rm_package_dir_out.rc != 0
+
+        - name: Delete '{{ host_profile_dir }}' Folder
+          ansible.builtin.raw: "rm -rfd \"{{ host_profile_dir }}\""
+          register: rm_profile_dir_out
+          failed_when: >
+            rm_profile_dir_out.rc != 0
+
+        - name: Delete '{{ host_script_dir }}' Folder
+          ansible.builtin.raw: "rm -rfd \"{{ host_script_dir }}\""
+          register: rm_script_dir_out
+          failed_when: >
+            rm_script_dir_out.rc != 0
+
+        - name: Delete '{{ host_temp_dir }}' Folder
+          ansible.builtin.raw: "rm -rfd \"{{ host_temp_dir }}\""
+          register: rm_temp_dir_out
+          failed_when: >
+            rm_temp_dir_out.rc != 0
+
+        - name: Delete '{{ host_vc_dir }}' Folder
+          ansible.builtin.raw: "rm -rfd \"{{ host_vc_dir }}\""
+          register: rm_vc_dir_out
+          failed_when: >
+            rm_vc_dir_out.rc != 0
+      when:
+        - not host_is_localhost
+        - is_linux
+
+      # *********************************
+      # On Windows Host(s):
+      # *********************************
+    - name: Clean Windows Host Systems
+      block:
+        - name: Delete '{{ host_log_dir }}' Folder
+          ansible.builtin.raw: "rmdir /S /Q \"{{ host_log_dir }}\""
+          register: delete_log_dir_out
+          failed_when: >
+            delete_log_dir_out.rc != 0 and ('cannot find' not in (delete_log_dir_out.stderr | lower))
+
+        - name: Delete '{{ host_package_dir }}' Folder
+          ansible.builtin.raw: "rmdir /S /Q \"{{ host_package_dir }}\""
+          register: delete_package_dir_out
+          failed_when: >
+            delete_package_dir_out.rc != 0 and ('cannot find' not in (delete_package_dir_out.stderr | lower))
+
+        - name: Delete '{{ host_profile_dir }}' Folder
+          ansible.builtin.raw: "rmdir /S /Q \"{{ host_profile_dir }}\""
+          register: delete_profile_dir_out
+          failed_when: >
+            delete_profile_dir_out.rc != 0 and ('cannot find' not in (delete_profile_dir_out.stderr | lower))
+
+        - name: Delete '{{ host_script_dir }}' Folder
+          ansible.builtin.raw: "rmdir /S /Q \"{{ host_script_dir }}\""
+          register: delete_script_dir_out
+          failed_when: >
+            delete_script_dir_out.rc != 0 and ('cannot find' not in (delete_script_dir_out.stderr | lower))
+
+        - name: Delete '{{ host_temp_dir }}' Folder
+          ansible.builtin.raw: "rmdir /S /Q \"{{ host_temp_dir }}\""
+          register: delete_temp_dir_out
+          failed_when: >
+            delete_temp_dir_out.rc != 0 and ('cannot find' not in (delete_temp_dir_out.stderr | lower))
+
+        - name: Delete '{{ host_vc_dir }}' Folder
+          ansible.builtin.raw: "rmdir /S /Q \"{{ host_vc_dir }}\""
+          register: delete_vc_dir_out
+          failed_when: >
+            delete_vc_dir_out.rc != 0 and ('cannot find' not in (delete_vc_dir_out.stderr | lower))
+      when:
+        - not host_is_localhost
+        - is_windows
+
+    

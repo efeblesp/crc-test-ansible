@@ -1,0 +1,34 @@
+---
+- name: Encrypt a File
+  hosts: localhost
+  gather_facts: false
+  vars:
+    pass_file: "/root/.ansible_vault_pass"
+
+  tasks:
+    # *********************************
+    # On Controller|localhost:
+    # *********************************
+    - name: Check Requirements
+      ansible.builtin.fail:
+        msg: "Required variable 'file_path' not defined. This variable defines the file to encrypt and must be defined on the command line."
+      when: file_path is not defined
+
+    - ansible.builtin.stat:
+        path: "{{ pass_file }}"
+      register: p
+
+    - name: Confirm Vault Pass File
+      ansible.builtin.assert:
+        that:
+          - p.stat.exists
+        fail_msg: "Required Ansible vault pass file '{{ pass_file }}' does not exist."
+        success_msg: "Ansible vault pass file confirmed."
+
+    - name: Encrypt File
+      ansible.builtin.raw: ansible-vault encrypt "{{ file_path }}"
+      register: encrypt_out
+
+    - name: Show Results
+      ansible.builtin.debug:
+        msg: "{{ encrypt_out | format_output }}"

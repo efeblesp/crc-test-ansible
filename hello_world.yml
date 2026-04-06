@@ -1,0 +1,39 @@
+---
+- name: Hello World
+  hosts: all
+  gather_facts: false
+
+  pre_tasks:
+    - include_role:
+        name: init_env
+
+  # The following commands can be executed directly without the need to 
+  # have a playbook if desirable.
+  #
+  # e.g.
+  # docker exec -it sdkagent ansible -i /agent/ansible/inventories/demo windows_servers -m raw -a "cmd /C \"systeminfo\""
+  # docker exec -it sdkagent ansible -i /agent/ansible/inventories/demo linux_servers -m raw -a "bash -c \"cat /etc/hostname&&cat /etc/os-release\""
+  tasks:
+    - name: Execute Command On Windows
+      block:
+        - name: Execute on Windows
+          ansible.builtin.raw: cmd /C "systeminfo"
+          register: out
+
+        - name: Host Info (Windows)
+          ansible.builtin.debug:
+            msg: "{{ out | format_output }}"
+      when: is_windows
+
+    - name: Execute Command on Linux
+      block:
+        - name: Execute on Linux
+          ansible.builtin.raw: bash -c "cat /etc/hostname&&cat /etc/os-release"
+          register: out
+
+        - name: Host Info (Windows)
+          ansible.builtin.debug:
+            msg: "{{ out | format_output }}"
+      when: is_linux
+
+    

@@ -1,0 +1,34 @@
+---
+- name: Create Vault Pass File
+  hosts: localhost
+  gather_facts: false
+  vars:
+    pass_file: "/root/.ansible_vault_pass"
+
+  tasks:
+      # *********************************
+      # On Controller|localhost:
+      # *********************************
+    - name: Check Requirements
+      fail:
+        msg: "Required variable 'vault_pwd' not defined. This variable must be defined on the command line."
+      when: vault_pwd is not defined
+
+    - name: Delete Existing Pass File
+      ansible.builtin.raw: rm -f {{ pass_file }}
+
+    - name: Create New Pass File
+      ansible.builtin.raw: touch {{ pass_file }}
+
+    - name: Add Password to Pass File
+      ansible.builtin.raw: echo "{{ vault_pwd }}" > {{ pass_file }}
+
+    - name: Set Pass File Permissions
+      ansible.builtin.raw: chmod 600 {{ pass_file }}
+
+    - ansible.builtin.raw: ls -l {{ pass_file }}
+      register: ls_out
+
+    - name: Show Pass File Permissions
+      ansible.builtin.debug:
+        msg: "{{ ls_out | format_output }}"

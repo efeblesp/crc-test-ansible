@@ -1,0 +1,64 @@
+---
+- name: Install Python
+  hosts: all
+  gather_facts: false
+
+  pre_tasks:
+    - include_role:
+        name: init_env
+  
+  tasks:
+    - name: Install Python (Linux)
+      block:
+        - name: Linux|Initialize Folders
+          import_role:
+            name: init_folders
+
+        - name: Linux|Push Installation Script
+          ansible.builtin.copy:
+            src: "{{ agent_script_dir }}/{{ host_platform_architecture }}/install-python.sh"
+            dest: "{{ host_script_dir }}/{{ host_platform_architecture }}/install-python.sh"
+            mode: '0777'
+            force: true
+
+        - name: Linux|Install Python
+          ansible.builtin.raw: "{{ host_script_dir }}/{{ host_platform_architecture }}/install-python.sh"
+          register: out
+
+        - name: Linux|Show Results
+          ansible.builtin.debug:
+            msg: "{{ out | format_output }}"
+      when:
+        - not host_is_localhost
+        - is_linux
+
+    - name: Install Python (Windows)
+      block:
+        - name: Windows|Initialize Folders
+          import_role:
+            name: init_folders
+
+        - name: Windows|Push Installation Script
+          ansible.builtin.copy:
+            src: "{{ agent_script_dir }}/{{ host_platform_architecture }}/install-python.cmd"
+            dest: "{{ host_script_dir }}\\{{ host_platform_architecture }}\\install-python.cmd"
+            force: true
+
+        - name: Windows|Push Installer/Exe
+          ansible.builtin.copy:
+            src: "{{ item }}"
+            dest: "{{ host_script_dir }}\\{{ host_platform_architecture }}"
+            force: true
+          with_fileglob:
+            - "{{ agent_script_dir }}/{{ host_platform_architecture }}/python*.exe"
+
+        - name: Windows|Install Python
+          ansible.builtin.raw: "{{ host_script_dir }}\\{{ host_platform_architecture }}\\install-python.cmd"
+          register: out
+
+        - name: Windows|Show Results
+          ansible.builtin.debug:
+            msg: "{{ out | format_output }}"
+      when:
+        - not host_is_localhost
+        - is_windows

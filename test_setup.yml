@@ -1,0 +1,40 @@
+---
+- name: Test Dependencies Installed
+  hosts: all
+  gather_facts: false
+
+  pre_tasks:
+    - include_role:
+        name: init_env
+
+  tasks:
+    - name: Check for PowerShell Installation
+      block:
+        - name: Check PowerShell Version
+          ansible.builtin.raw: "pwsh --version"
+          register: out_pwsh
+
+        - name: PowerShell Installed
+          ansible.builtin.debug:
+            msg: "{{ out_pwsh | format_output }}"
+
+      rescue:
+        - name: PowerShell NOT Installed
+          ansible.builtin.debug:
+            msg: "{{ out_pwsh | format_output }}"
+
+    - name: Check for Python Installation
+      block:
+        - name: Check Python Version
+          ansible.builtin.raw: "{{ 'python.exe --version' if (ansible_facts.os_family | lower == 'windows') else 'python3 --version' }}"
+          register: out_py
+          no_log: true
+
+        - name: Python Installed
+          ansible.builtin.debug:
+            msg: "{{ out_py | format_output }}"
+
+      rescue:
+        - name: Python NOT Installed
+          ansible.builtin.debug:
+            msg: "{{ out_py | format_output }}"

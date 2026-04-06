@@ -1,0 +1,121 @@
+---
+- name: Push Packages
+  hosts: all
+  gather_facts: false
+  vars:
+    package_temp_dir: "/tmp/packages"
+    packages_archive_file_name: "packages.tar.gz"
+    packages_archive_file: "/tmp/{{ packages_archive_file_name }}"
+  
+  pre_tasks:
+    - include_role:
+        name: init_env
+    - include_role:
+        name: init_folders
+
+  tasks:
+      # *********************************
+      # On Controller|localhost:
+      # *********************************
+      # Ensure there are no previous archive files in the temp/staging directory
+      # (e.g. rm -f /tmp/packages.tar.gz).
+    - name: Delete Existing Archive Files
+      ansible.builtin.raw: rm -f /tmp/virtualclient*.gz
+      delegate_to: localhost
+      run_once: true
+
+    - name: Stage Packages
+      include_role:
+        name: create_archive
+      vars:
+        source_dir: "{{ agent_package_dir }}"
+        staging_dir: "{{ package_temp_dir }}"
+        archive_file: "{{ packages_archive_file }}"
+      run_once: true
+
+      # *********************************
+      # On Linux Host(s):
+      # *********************************
+    - name: Transfer Packages to Linux Hosts
+      block:
+          # Copy the packages.tar.gz file to the target host.
+        - name: Linux Hosts-> Transfer Packages Archive
+          ansible.builtin.copy:
+            src: "{{ packages_archive_file }}"
+            dest: "{{ host_temp_dir }}/{{ packages_archive_file_name }}"
+            force: true
+
+        - name: Extract Packages
+          block:
+              # Extract/unzip the packages.tar.gz file on the target host
+              # (e.g. tar -xf /home/demo/sdkagent/temp/packages.tar.gz -C /home/demo/sdkagent/demo/packages).
+            - name: Linux Hosts-> Extract Packages
+              ansible.builtin.raw: tar -xf "{{ host_temp_dir }}/{{ packages_archive_file_name }}" -C "{{ host_package_dir }}"
+              register: tar_packages_out
+          rescue:
+            - name: Linux Hosts->Show Extract Errors
+              ansible.builtin.debug:
+                msg: "{{ tar_packages_out | format_output }}"
+
+        - name: Set Permissions
+          block:
+              # Extract/unzip the packages.tar.gz file on the target host
+              # (e.g. tar -xf /home/demo/sdkagent/temp/packages.tar.gz -C /home/demo/sdkagent/demo/packages).
+            - name: Linux Hosts-> Set Permissions on Packages Folder
+              ansible.builtin.raw: chmod -R 2777 "{{ host_package_dir }}"
+              register: chmod_packages_out
+              become: true
+          rescue:
+            - name: Linux Hosts-> Show Permissions Errors
+              ansible.builtin.debug:
+                msg: "{{ chmod_packages_out | format_output }}"
+
+          # Delete the packages.tar.gz file copied to the host
+          # (e.g. rm -f /home/demo/sdkagent/temp/packages.tar.gz).
+        - name: Linux Hosts-> Clean Temp Files
+          ansible.builtin.raw: rm -f "{{ host_temp_dir }}/{{ packages_archive_file_name }}"
+      when:
+        - not host_is_localhost
+        - is_linux
+
+      # *********************************
+      # On Windows Host(s):
+      # *********************************
+    - name: Transfer Packages to Windows Hosts
+      block:
+          # Copy the packages.tar.gz file to the target host.
+        - name: Windows Hosts-> Transfer Packages Archive
+          ansible.builtin.copy:
+            src: "{{ packages_archive_file }}"
+            dest: "{{ host_temp_dir }}/{{ packages_archive_file_name }}"
+            force: true
+
+        - name: Extract Packages
+          block:
+              # Extract/unzip the packages.tar.gz file on the target host
+              # (e.g. tar -xf C:\Users\demo\sdkagent\temp\packages.tar.gz -C C:\Users\demo\sdkagent\packages).
+            - name: Windows Hosts-> Extract Packages
+              ansible.builtin.raw: tar -xf "{{ host_temp_dir }}\\{{ packages_archive_file_name }}" -C "{{ host_package_dir }}"
+              register: tar_packages_out
+          rescue:
+            - name: Windows Hosts-> Show Extract Errors
+              ansible.builtin.debug:
+                msg: "{{ tar_packages_out | format_output }}"
+
+          # Delete the packages.tar.gz file copied to the host
+          # (e.g. del /F /Q C:\Users\demo\sdkagent\temp\packages.tar.gz).
+        - name: Windows Hosts-> Clean Temp Files
+          ansible.builtin.raw: del /F /Q "{{ host_temp_dir }}\\{{ packages_archive_file_name }}"
+      when:
+        - not host_is_localhost
+        - is_windows
+
+      # *********************************
+      # On Controller:
+      # *********************************
+      # Remove the archive files in the temp/staging directory
+      # (e.g. rm -f /tmp/packages.tar.gz).
+    - name: Clean Temp Directory
+      ansible.builtin.raw: rm -f /tmp/packages*.gz
+      delegate_to: localhost
+      run_once: true

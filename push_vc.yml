@@ -1,0 +1,160 @@
+---
+- name: Push Virtual Client
+  hosts: all
+  gather_facts: false
+  vars:
+    package_temp_dir: "/tmp/packages_vc"
+  
+  pre_tasks:
+    - include_role:
+        name: init_env
+    - include_role:
+        name: init_folders
+
+  tasks:
+      # *********************************
+      # On Controller:
+      # *********************************
+      # Ensure there are no previous archive files in the temp/staging directory
+      # (e.g. rm -f /tmp/packages.tar.gz).
+    - name: Delete Existing Archive Files
+      ansible.builtin.raw: rm -f /tmp/virtualclient*.gz
+      delegate_to: localhost
+      run_once: true
+
+      # Create archive files for each target host platform-architecture. This ensures
+      # we transfer the build of Virtual Client designed to run on the target system.
+    - name: Stage Packages
+      include_role:
+        name: create_archive
+      vars:
+        source_dir: "{{ agent_dir }}/{{ arch }}"
+        staging_dir: "{{ package_temp_dir }}/{{ arch }}"
+        archive_file: "/tmp/virtualclient-{{ arch }}.tar.gz"
+      run_once: true
+      loop: "{{ ansible_play_hosts | map('extract', hostvars) | map(attribute='host_platform_architecture') | unique | list }}"
+      loop_control:
+        loop_var: arch
+
+      # *********************************
+      # On Linux Host(s):
+      # *********************************
+    - name: Transfer Virtual Client to Linux Hosts
+      block:
+        - name: Linux Hosts-> Set Archive Targets
+          set_fact:
+            # e.g.
+            # virtualclient-linux-x64.tar.gz, virtualclient-linux-arm64.tar.gz
+            vc_archive_file_name: "virtualclient-{{ host_platform_architecture }}.tar.gz"
+
+            # e.g.
+            # /tmp/virtualclient-linux-x64.tar.gz, /tmp/virtualclient-linux-arm64.tar.gz
+            vc_archive_file: "/tmp/virtualclient-{{ host_platform_architecture }}.tar.gz"
+
+          # Copy the virtualclient.tar.gz file to the target host.
+        - name: Linux Hosts-> Transfer Package Archive
+          ansible.builtin.copy:
+            src: "{{ vc_archive_file }}"
+            dest: "{{ host_temp_dir }}/{{ vc_archive_file_name }}"
+            force: true
+
+          # Ensure the VC target directory exists
+          # (e.g. mkdir -p /home/demo/sdkagent/demo/linux-arm64)
+        - name: Linux Hosts-> Create Installation Folder
+          ansible.builtin.raw: mkdir -p "{{ host_vc_dir }}"
+          register: mkdir_out
+          failed_when: >
+            mkdir_out.rc != 0 and ('exists' not in (mkdir_out.stdout | lower))
+
+        - name: Extract Package
+          block:
+              # Extract/unzip the virtualclient tar.gz file on the target host
+              # (e.g. tar -xf /home/demo/sdkagent/temp/virtualclient.tar.gz -C /home/demo/sdkagent/demo/linux-arm64).
+            - name: Linux Hosts-> Extract Package
+              ansible.builtin.raw: tar -xf "{{ host_temp_dir }}/{{ vc_archive_file_name }}" -C "{{ host_vc_dir }}"
+              register: tar_out
+          rescue:
+            - name: Linux Hosts-> Show Extract Errors
+              ansible.builtin.debug:
+                msg: "{{ tar_out | format_output }}"
+
+        - name: Set Permissions
+          block:
+              # Set permissions on the VC folder
+              # (e.g. chmod -R 2777 /home/demo/sdkagent/demo/linux-arm64).
+            - name: Linux Hosts-> Set Permissions on Target Folder
+              ansible.builtin.raw: chmod -R 2777 "{{ host_vc_dir }}"
+              register: chmod_out
+              become: true
+          rescue:
+            - name: Linux Hosts-> Show Permissions Errors
+              ansible.builtin.debug:
+                msg: "{{ chmod_out | format_output }}"
+
+          # Delete the virtualclient.tar.gz file copied to the host
+          # (e.g. rm -f /home/demo/sdkagent/temp/virtualclient.tar.gz).
+        - name: Linux Hosts-> Clean Temp Files
+          ansible.builtin.raw: rm -f "{{ host_temp_dir }}/{{ vc_archive_file_name }}"
+      when:
+        - not host_is_localhost
+        - is_linux
+
+      # *********************************
+      # On Windows Host(s):
+      # *********************************
+    - name: Stage Virtual Client Package for Windows/ARM64 Hosts
+      block:
+        - name: Windows Hosts-> Set Archive Targets
+          set_fact:
+            # e.g.
+            # virtualclient-win-x64.tar.gz, virtualclient-win-arm64.tar.gz
+            vc_archive_file_name: "virtualclient-{{ host_platform_architecture }}.tar.gz"
+
+            # e.g.
+            # /tmp/virtualclient-win-x64.tar.gz, /tmp/virtualclient-win-arm64.tar.gz
+            vc_archive_file: "/tmp/virtualclient-{{ host_platform_architecture }}.tar.gz"
+
+          # Copy the virtualclient tar.gz file to the target host.
+        - name: Windows Hosts-> Transfer Package Archive
+          ansible.builtin.copy:
+            src: "{{ vc_archive_file }}"
+            dest: "{{ host_temp_dir }}/{{ vc_archive_file_name }}"
+            force: true
+
+          # Ensure the VC target directory exists
+          # (e.g. mkdir -p C:\Users\demo\sdkagent\win-x64)
+        - name: Windows Hosts-> Create Installation Folder
+          ansible.builtin.raw: mkdir "{{ host_vc_dir }}"
+          register: mkdir_out
+          failed_when: >
+            mkdir_out.rc != 0 and ('already exists' not in (mkdir_out.stderr | lower))
+
+        - name: Extract Packages
+          block:
+              # Extract/unzip the virtualclient.tar.gz file on the target host
+              # (e.g. tar -xf C:\Users\demo\sdkagent\temp\virtualclient.tar.gz -C C:\Users\demo\sdkagent\win-x64).
+            - name: Windows Hosts-> Extract Package
+              ansible.builtin.raw: tar -xf "{{ host_temp_dir }}\\{{ vc_archive_file_name }}" -C "{{ host_vc_dir }}"
+              register: tar_out
+          rescue:
+            - name: Windows Hosts-> Show Extract Errors
+              ansible.builtin.debug:
+                msg: "{{ tar_out | format_output }}"
+
+          # Delete the virtualclient.tar.gz file copied to the host
+          # (e.g. del /F /Q C:\Users\demo\sdkagent\temp\virtualclient.tar.gz).
+        - name: Windows Hosts-> Clean Temp Files
+          ansible.builtin.raw: del /F /Q "{{ host_temp_dir }}\\{{ vc_archive_file_name }}"
+      when:
+        - not host_is_localhost
+        - is_windows
+
+      # *********************************
+      # On Controller:
+      # *********************************
+      # Remove the archive files in the temp/staging directory
+      # (e.g. rm -f /tmp/packages.tar.gz).
+    - name: Clean Temp Directory
+      ansible.builtin.raw: rm -f /tmp/virtualclient*.gz
+      delegate_to: localhost
+      run_once: true

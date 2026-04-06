@@ -1,0 +1,10 @@
+---
+- name: Show Hosts Environment
+  hosts: all
+  gather_facts: false
+  vars:
+    debug_mode: true
+
+  pre_tasks:
+    - include_role:
+        name: init_env
